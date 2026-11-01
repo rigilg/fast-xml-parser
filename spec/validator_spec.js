@@ -2,7 +2,7 @@
 
 import fs from "fs";
 import path from "path";
-import {XMLValidator} from "../src/fxp.js";
+import {XMLParser, XMLValidator} from "../src/fxp.js";
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
 
@@ -475,4 +475,61 @@ describe("XML Validator with options", function () {
         expect(result).toBeTrue();
     });
 
+});
+
+describe("XML 1.0 CharData must not contain ]]>", function () {
+    it("should reject a literal ]]> in element text", function () {
+        validate("<a>]]></a>", {
+            InvalidChar: "Sequence ']]>' is not allowed in content."
+        }, 1, 4);
+    });
+
+    it("should reject ]]> between child elements", function () {
+        validate("<root><a/>]]><b/></root>", {
+            InvalidChar: "Sequence ']]>' is not allowed in content."
+        }, 1, 11);
+    });
+
+    it("should reject ]]> in text after a CDATA section", function () {
+        validate("<a><![CDATA[]]>]]></a>", {
+            InvalidChar: "Sequence ']]>' is not allowed in content."
+        }, 1, 16);
+    });
+
+    it("should report the line of ]]> in later content", function () {
+        validate("<a>\n]]></a>", {
+            InvalidChar: "Sequence ']]>' is not allowed in content."
+        }, 2, 1);
+    });
+
+    it("should accept ]]> written as ]]&gt;", function () {
+        validate("<a>]]&gt;</a>");
+    });
+
+    it("should accept ]] and ]> that are not the forbidden sequence", function () {
+        validate("<a>]]</a>");
+        validate("<a>]></a>");
+        validate("<a>]] ></a>");
+    });
+
+    it("should accept CDATA sections that end with ]]>", function () {
+        validate("<a><![CDATA[x]]></a>");
+        validate("<a><![CDATA[]]]></a>");
+        validate("<a><![CDATA[]]]]></a>");
+        validate("<a><![CDATA[]]></a>");
+    });
+
+    it("should accept ]]> in a comment, an attribute, or a processing instruction", function () {
+        validate("<a><!-- ]]> --></a>");
+        validate('<a b="]]>"></a>');
+        validate("<?pi ]]> ?><a/>");
+    });
+
+    it("should reject ]]> when parsing with validation enabled", function () {
+        const parser = new XMLParser();
+        expect(() => parser.parse("<a>]]></a>", true))
+            .toThrowError("Sequence ']]>' is not allowed in content.:1:4");
+        expect(parser.parse("<a>]]&gt;</a>", true)).toEqual({ a: "]]>" });
+        expect(parser.parse("<a><![CDATA[x]]></a>", true)).toEqual({ a: "x" });
+    });
 });

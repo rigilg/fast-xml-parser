@@ -163,6 +163,10 @@ export function validate(xmlData, options) {
             if (reachedRoot === true && !isWhiteSpace(xmlData[i])) {
               return getErrorObject('InvalidXml', "Extra text at the end", getLineNumberForPosition(xmlData, i));
             }
+            // XML 1.0 CharData excludes ']]>' except as the end of a CDATA section.
+            if (xmlData[i] === ']' && xmlData[i + 1] === ']' && xmlData[i + 2] === '>') {
+              return getErrorObject('InvalidChar', "Sequence ']]>' is not allowed in content.", getLineNumberForPosition(xmlData, i));
+            }
           }
         } //end of reading tag text value
         if (xmlData[i] === '<') {
