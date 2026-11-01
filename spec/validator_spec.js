@@ -2,7 +2,7 @@
 
 import fs from "fs";
 import path from "path";
-import {XMLValidator} from "../src/fxp.js";
+import {XMLParser, XMLValidator} from "../src/fxp.js";
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
 
@@ -174,7 +174,8 @@ describe("XML Validator", function () {
 
     it("should not validate xml with non closing comment", function () {
         validate("<rootNode ><!-- <tag> -- <tag>1</tag><tag>val</tag></rootNode>", {
-            InvalidTag: "Unclosed tag 'rootNode'."}, 1);
+            InvalidChar: "Sequence '--' is not allowed in a comment."
+        }, 1, 23);
     });
 
     it("should not validate xml with unclosed tag", function () {
@@ -475,4 +476,62 @@ describe("XML Validator with options", function () {
         expect(result).toBeTrue();
     });
 
+});
+
+describe("XML 1.0 comments must not contain --", function () {
+    it("should reject a double hyphen inside a comment", function () {
+        validate("<a><!--foo--bar--></a>", {
+            InvalidChar: "Sequence '--' is not allowed in a comment."
+        }, 1, 11);
+    });
+
+    it("should reject a comment ending in --->", function () {
+        validate("<a><!--foo---></a>", {
+            InvalidChar: "Sequence '--' is not allowed in a comment."
+        }, 1, 11);
+        validate("<a><!-- ---></a>", {
+            InvalidChar: "Sequence '--' is not allowed in a comment."
+        }, 1, 9);
+    });
+
+    it("should reject -- on a later line of a comment", function () {
+        validate("<a><!-- foo\n-- bar --></a>", {
+            InvalidChar: "Sequence '--' is not allowed in a comment."
+        }, 2, 1);
+    });
+
+    it("should accept a normal comment", function () {
+        validate("<a><!--ok--></a>");
+    });
+
+    it("should accept an empty comment", function () {
+        validate("<a><!----></a>");
+    });
+
+    it("should accept a single hyphen in a comment", function () {
+        validate("<a><!-- - --></a>");
+        validate("<a><!-- foo -\n- bar --></a>");
+    });
+
+    it("should still reject a comment that never closes", function () {
+        validate("<a><!--></a>", {
+            InvalidTag: "Unclosed tag 'a'."
+        }, 1);
+        // '<!--- >' ends in '--->' but the body is a single '-' followed by '>', so it is not closed by '-->'.
+        validate("<a><!---></a>", {
+            InvalidTag: "Unclosed tag 'a'."
+        }, 1);
+        validate("<rootNode ><!-- <tag> - <tag>1</tag><tag>val</tag></rootNode>", {
+            InvalidTag: "Unclosed tag 'rootNode'."
+        }, 1);
+    });
+
+    it("should reject -- when parsing with validation enabled", function () {
+        const parser = new XMLParser();
+        expect(() => parser.parse("<a><!--foo--bar--></a>", true))
+            .toThrowError("Sequence '--' is not allowed in a comment.:1:11");
+        expect(parser.parse("<a><!--ok--></a>", true)).toEqual({ a: "" });
+        expect(parser.parse("<a><!----></a>", true)).toEqual({ a: "" });
+        expect(parser.parse("<a><!-- - --></a>", true)).toEqual({ a: "" });
+    });
 });
